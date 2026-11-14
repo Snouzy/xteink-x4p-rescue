@@ -120,3 +120,25 @@ docs/
 ## Legal
 
 Firmware images belong to their respective projects (CrossPoint, Xteink). This repo contains only original scripts and documentation. MIT license.
+
+## Hard wedge (added 2026-11-14, from the field)
+
+Symptom: screen frozen, console silent, no mDNS, esptool sync fails on every
+port/baud/`--before` mode, power/page-button combos (up to 60 s) do nothing,
+DTR/RTS patterns do not reset the chip (verified by 50 ms port polling).
+
+Meaning: the CPU is wedged with interrupts off. The power button is only an
+interrupt source — a hung CPU never sees it. USB enumerates at descriptor
+level, but the app owns the peripheral and never services requests.
+
+What un-wedged it once (not reproducible on demand): a pyserial line-dance
+script *crashed* while holding DTR low; the abrupt close coincided with a panic
+reboot that landed in ROM download mode (`/dev/cu.usbmodem201101`) — `esptool
+flash_id` succeeded. If a ROM port (`201101`) reappears, immediately run with
+`--before no-reset --after no-reset` to *stay* in download mode, then flash as
+usual.
+
+Reliable recovery without opening: **let the battery drain fully** (LED on =
+active drain; gentle warmth ~30-35 C roughly halves the time, 650 mAh ->
+12-36 h). When the LED is off: charge 15 min, Power 3 s. If the firmware
+re-wedges at boot, reflash (procedure above) as soon as a ROM port appears.
