@@ -86,3 +86,18 @@ string afterwards, which is the success tell.
 
 See the [README](../README.md#quick-rescue-procedure) — three commands:
 `make-ptable.py`, one small `write_flash 0x8000`, then `flash-chunked.sh`.
+
+## Session 3 (2026-11-14, soirée) — l'affaire Spinoza
+
+L'EPUB `Spinoza _ l'essentiel de sa pensee en 100 - Camille Rousseau.epub`
+(295 461 o, copié à la racine de la carte) est introuvable dans la
+bibliothèque : seuls les livres déjà ouverts s'affichent, aucun popup de
+scan. Soirée passée sur les logs UART (`[CPRO]` confondu avec l'index — en
+réalité ContentProtection, le DRM d'un livre en cours d'ouverture). Cause
+finale vérifiée dans le code CrossInk (`src/activities/library/LibraryActivity.cpp:146-153`)
+: avec le tri **« Récemment ouverts »**, `refreshIndexIfNeeded()` ferme
+l'index et retourne sans jamais scanner. Le dirty flag n'étant posé que par
+les arrivées via l'appareil, une copie Mac ne déclenche jamais rien.
+Repro PC du vrai `LibraryBuilder` (voir [wiki/06](../wiki/06-debug-pc.md)) :
+les deux vrais fichiers (accents et apostrophes inclus) indexent sans
+erreur. Session consignée dans le [wiki](../wiki/00-index.md) (pages 03–06).

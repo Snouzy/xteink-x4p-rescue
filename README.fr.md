@@ -44,6 +44,20 @@ Le format fonctionnel — reverse-engineeré depuis l'image KO elle-même — es
 | esptool, image entière d'un coup | ❌ Même coupure, de façon constante |
 | **esptool en chunks de 256 Ko + retry** | ✅ **Fonctionne.** ~21 chunks, retries individuels |
 
+## Wiki
+
+Un wiki technique en français détaille l'usage quotidien de la liseuse sous
+CrossPoint / CrossInk. Entrée : [wiki/00-index.md](wiki/00-index.md).
+
+- [01 — Matériel](wiki/01-materiel.md) : ports USB, flash 8/16 Mo, reset bouton, freeze sans carte SD, batterie.
+- [02 — Flash](wiki/02-flash.md) : ordre de flash, JTAG, open-storm (rappels + renvois).
+- [03 — Console UART](wiki/03-console-uart.md) : captures avec reconnexion, glossaire des logs réels.
+- [04 — Carte SD](wiki/04-carte-sd.md) : Lecteur USB, sidecars macOS, éjection, sauvegarde, ajouts par paquets.
+- [05 — Bibliothèque & scan](wiki/05-bibliotheque-scan.md) : pourquoi un livre copié n'apparaît pas (piège du tri « Récemment ouverts »).
+- [06 — Debug PC](wiki/06-debug-pc.md) : reproduire le scan du firmware sur Mac avec le vrai `LibraryBuilder`.
+- [07 — Firmwares](wiki/07-firmwares.md) : CrossPoint vs CrossInk, tris, images full vs app.
+- [08 — Playbooks](wiki/08-playbooks.md) : fiches scénarios A→F, de « livre invisible » à « logs d'un boot ».
+
 ## Procédure de sauvetage
 
 ```bash
@@ -53,12 +67,15 @@ curl -L -o x4pro-full.bin \
 
 python scripts/make-ptable.py ptable.bin
 
+# ORDRE CRITIQUE (leçon du 14/11, voir wiki/02-flash.md) :
+# 1) l'image full D'ABORD — elle embarque une table 16 Mo à 0x8000 qui écrase
+#    tout ce qui s'y trouve ; 2) ptable 8 Mo ENSUITE, il écrase la table 16 Mo.
+./scripts/flash-chunked.sh 0 x4pro-full.bin
+# Si le script s'arrête au chunk N : ./scripts/flash-chunked.sh N x4pro-full.bin
+
 ESPTOOL=$(which esptool)
 $ESPTOOL --chip esp32s3 --port /dev/cu.usbmodemXXXXXX --baud 460800 \
   --before usb-reset write_flash 0x8000 ptable.bin
-
-./scripts/flash-chunked.sh 0 x4pro-full.bin
-# Si le script s'arrête au chunk N : ./scripts/flash-chunked.sh N x4pro-full.bin
 
 # Débrancher l'USB, Power ~3 s. Premier boot ~30 s.
 ```
@@ -86,6 +103,17 @@ python scripts/console-listen.py /dev/cu.usbmodemXXXXXX
 - Stock : Licorice OS, build `26111201` (format date AAAAMMJJ).
 - Le verrouillage USB-flash n'existe que sur les unités achetées hors
   xteink.com (AliExpress etc.).
+
+## Historique des sessions
+
+- **Session 1 — 12/11/2026** : sauvetage initial (flash chunké, table 8 Mo,
+  magic MD5 `EB EB`). Journal : [docs/full-story.md](docs/full-story.md).
+- **Session 2 — 14/11/2026** : hard-wedge → résurrection par `open-storm.py`
+  puis JTAG. Rapport de terrain : [README.md](README.md) (section
+  « Session 2 »).
+- **Session 3 — 14/11/2026** : piège du tri « Récemment ouverts » (livre
+  Spinoza invisible), diagnostic UART, repro PC du scan. Wiki 03–06 et
+  [docs/full-story.md](docs/full-story.md) (section « Session 3 »).
 
 ## Licence
 

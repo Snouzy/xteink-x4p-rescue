@@ -119,6 +119,15 @@ docs/
   full-story.md       # The complete chronological rescue log
 ```
 
+## Wiki (français)
+
+Un wiki technique complet en français couvre l'usage quotidien de la liseuse
+sous CrossPoint / CrossInk : matériel, console UART, carte SD, mécanique du
+scan de bibliothèque (piège du tri « Récemment ouverts »), debug sur PC avec
+le vrai code source, et playbooks de dépannage.
+
+→ Point d'entrée : **[wiki/00-index.md](wiki/00-index.md)**
+
 ## Device facts (X4 Pro)
 
 - SoC: **ESP32-S3** (dual-core 240 MHz, 8 MB PSRAM), flash: **8 MB**
