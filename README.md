@@ -64,12 +64,21 @@ python scripts/make-ptable.py ptable.bin
 # 3. Connect the X4 Pro over USB-C (data cable!), wake the screen, then:
 ESPTOOL=$(which esptool || echo venv/bin/esptool)
 
-#    3a. Flash the corrected partition table at 0x8000
-$ESPTOOL --chip esp32s3 --port /dev/cu.usbmodemXXXXXX --baud 460800 \
-  --before usb-reset write_flash 0x8000 ptable.bin
-
-#    3b. Flash the full image in 256 KB chunks (auto-resume on failure)
+#    3a. Flash the full image in 256 KB chunks (auto-resume on failure)
 ./scripts/flash-chunked.sh 0 x4pro-full.bin
+#
+#    ⚠ ORDRE IMPORTANT (brûlé le 2026-11-14) : l'image "full" contient la
+#    table 16 Mo cassée à 0x8000. Si on écrit ptable.bin AVANT, le flash
+#    chunké (offset 0) RE-écrase la table corrigée avec la cassée.
+#    La table corrigée doit donc partir EN DERNIER :
+
+#    3b. Flash the corrected partition table at 0x8000 (après l'image !)
+$ESPTOOL --chip esp32s3 --port /dev/cu.usbmodemXXXXXX --baud 460800 \
+  --before no-reset --after hard_reset write_flash 0x8000 ptable.bin
+
+#    3c. Si le flash s'est terminé en mode download (--after no-reset),
+#    le bouton Power ne fait RIEN en mode ROM. Le hard_reset d'esptool
+#    (3b) est le déclencheur de boot. Sinon: débrancher 10 s + Power 3 s.
 
 # 4. Unplug USB, hold Power ~3 s. First boot takes ~30 s.
 ```
@@ -116,6 +125,67 @@ docs/
 - USB: native USB-Serial/JTAG — enumerates as `XTEink` (stock) / `Espressif` (CrossPoint). **No mass-storage interface ever appears** — the Finder will not show it; that is normal, not a fault.
 - Stock firmware: Licorice OS (build `26111201` = 2026-11-12), USB flashing locked only on units from third-party sellers; xteink.com units are unlocked.
 - MAC prefix `84:C7:BB` (Espressif), mDNS name `espressif.local` on your LAN.
+
+## Session 2 field report (2026-11-14) : hard wedge → résurrection JTAG
+
+Pire cas observé : écran figé (e-ink figé sur l'ancienne image), console muette,
+aucun esptool (tous bauds/modes), aucun combo boutons (Power/pages, 60 s),
+DTR/RTS **inertes** (vérifié par polling 50 ms — pas de circuit auto-reset sur ce
+hardware), pas de mDNS. La puce est bloquée avec les interruptions coupées :
+aucun signal logiciel ne la réveille. Le drain de batterie reste le plan de
+secours, mais AVANT d'attendre 36 h, la séquence suivante a tout débloqué :
+
+### Étape 1 — L'orage d'ouvertures (open-storm) : forcer un reboot
+
+L'app plantée crash quand on ouvre son port USB (événement qu'elle ne sait plus
+traiter → panic → reboot). `scripts/open-storm.py` ouvre/ferme le port en boucle
+(bauds et DTR/RTS aléatoires) jusqu'à obtenir la fenêtre ROM :
+le port réapparaît alors comme **`/dev/cu.usbmodem201101`** (nom par défaut du
+ROM ; l'app, elle, énumère `usbmodem84C7BB7AB2042`). Environ 4 s la première fois.
+Attraper le mode download : `esptool --before no-reset --after no-reset flash_id`
+(le `--after no-reset` EST le secret : sinon esptool hard-reset la puce à la fin
+et on perd la fenêtre).
+
+### Étape 2 — Flash chunké, PUIS table (ordre !)
+
+`./scripts/flash-chunked.sh 0 <image-full.bin>` (le script auto-détecte le port ;
+21 chunks de 256 Ko, ~45 s). La puce reste en download mode à la fin
+(`--after no-reset`). Ne PAS compter sur le bouton Power : réécrire la table
+corrigée avec `--after hard_reset` (voir Quick rescue 3b).
+
+### Étape 3 — Si boot-loop "partition 3 invalid" : JTAG
+
+Si le boot affiche en boucle `partition 3 invalid - offset 0x6b0000 … exceeds
+flash chip size 0x800000`, c'est la table 16 Mo d'origine à 0x8000 (Étape 2 mal
+ordonnée, ou flash ancien). Deux remarques clés :
+
+- La console de boot **parle sur l'USB-JTAG à 115200** (pyserial, port 201101) :
+  on lit le diagnostic directement.
+- **Le mode download n'est PAS nécessaire pour réécrire le flash.** Le JTAG est
+  actif même en boot-loop. Mais OpenOCD *vanilla* échoue
+  (`esp_usb_jtag: could not find or open device`) car le composite CDC+JTAG a
+  l'interface JTAG en **position 2** (class 0xFF). Utiliser **openocd-esp32
+  d'Espressif** (prebuilt macOS-arm64 :
+  https://github.com/espressif/openocd-esp32/releases). pyusb ouvre le device
+  sans sudo ; lancer openocd-esp32 sans sudo suffit.
+
+```bash
+./scripts/jtag-fix-ptable.py [chemin/openocd-esp32/bin/openocd]
+# halt → program_esp ptable.bin 0x8000 verify reset (~25 s)
+```
+
+Le reset final fait démarrer l'app (logs mémoire `[INF] [MEM]…` sur la console
+= succès ; l'écran e-ink se rafraîchit au boot).
+
+### Faits techniques nouveaux (session 2)
+
+- Le flash bank est détecté **16 Mo** par esptool/JTAG, mais le ROM bootlog dit
+  `flash chip size 0x800000` (8 Mo) — probable eFuse. La table 8 Mo reste la
+  bonne ; boot validé deux fois (12/11 et 14/11).
+- Une fois le mode download latché (IO0 bas au reset), le ROM y **reste des
+  minutes** — pas de timeout court. On a le temps de lancer esptool.
+- Le e-ink retient l'ancienne image indéfiniment : un écran « figé » ne prouve
+  ni la mort ni la vie. Seuls comptent : console, logs, scintillement au boot.
 
 ## Legal
 
