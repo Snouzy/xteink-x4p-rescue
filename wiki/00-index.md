@@ -52,6 +52,12 @@ symptôme.
   *Quand consulter : tu as un symptôme précis et tu veux la checklist sans
   théorie.*
 
+- **[09 — Retour au stock](09-retour-stock.md)** — revenir au firmware Licorice
+  d'usine : pourquoi il faut un dump complet 16 Mo d'un X4 Pro d'origine, où le
+  trouver, procédure d'écriture.
+  *Quand consulter : tu veux remettre Xteink stock, ou comprendre pourquoi c'est
+  impossible sans dump.*
+
 ## Docs du dépôt (à ne pas dupliquer)
 
 - [`README.fr.md`](../README.fr.md) — procédure de sauvetage complète,

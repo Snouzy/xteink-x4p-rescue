@@ -57,6 +57,7 @@ CrossPoint / CrossInk. Entrée : [wiki/00-index.md](wiki/00-index.md).
 - [06 — Debug PC](wiki/06-debug-pc.md) : reproduire le scan du firmware sur Mac avec le vrai `LibraryBuilder`.
 - [07 — Firmwares](wiki/07-firmwares.md) : CrossPoint vs CrossInk, tris, images full vs app.
 - [08 — Playbooks](wiki/08-playbooks.md) : fiches scénarios A→F, de « livre invisible » à « logs d'un boot ».
+- [09 — Retour au stock](wiki/09-retour-stock.md) : revenir au firmware Licorice — il faut un dump 16 Mo d'un X4 Pro d'origine (pistes, procédure).
 
 ## Procédure de sauvetage
 
