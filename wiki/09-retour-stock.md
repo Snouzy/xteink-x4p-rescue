@@ -1,22 +1,54 @@
 # 09 — Retour au firmware stock (Xteink « Licorice »)
 
-## ✅ Le firmware stock est OBTENU (15/11/2026) — voie OTA officielle
+## ✅ FAIT le 15/11/2026 — stock V7.6.8 installé et fonctionnel
 
-Mise à jour majeure : il n'y a **pas besoin d'un dump d'un autre appareil**.
-L'API de mise à jour officielle de Xteink distribue le firmware stock en
-`.xota` (`encrypted_v1`), et le format a été publié par le projet open-source
-[crosspoint-tools](https://github.com/crosspoint-reader/crosspoint-tools)
-(`unlocker-tool/crates/unlocker-core/src/xota.rs`). Firmware récupéré et
-**déchiffré le 15/11/2026** :
+Le retour au stock a été réalisé : app officielle **V7.6.8** flashée @0x10000 via
+JTAG (`reset halt` + `program_esp … verify reset`, ~6 min pour 6,25 Mo), en
+conservant le bootloader ko.2 @0x0 et le ptable 8 Mo @0x8000. Premier boot sur
+l'écran de choix de région (Domestic CN / Overseas Global) — le stock fonctionne
+avec le bootloader ko.2, la preuve par l'usage.
 
-- **Xteink stock V7.6.8** (2026-09-22), app image ESP32-S3 claire,
-  sha256 `f68533a8c55c55144303605e6497a0178215d477ec2642375814e00612afe087`
-- Copies locales : `~/Downloads/xteink-stock-V7.6.8-encrypted.xota` (chiffré)
-  et `~/Downloads/xteink-stock-app-V7.6.8.bin` (clair, flashable)
-- ⚠️ Ne pas publier ces binaires dans le dépôt public (copyright Xteink) —
-  la méthode ci-dessous suffit à les régénérer.
+Binaires (ne pas publier, copyright Xteink) :
+- `~/Downloads/xteink-stock-app-V7.6.8.bin` — app claire, sha256
+  `f68533a8c55c55144303605e6497a0178215d477ec2642375814e00612afe087`
+- `~/Downloads/xteink-stock-V7.6.8-encrypted.xota` — original chiffré
 
-### Comment le firmware a été obtenu (méthode reproductible)
+### Limitation connue : les mises à jour OTA automatiques échouent (code -112)
+
+`esp_ota_begin` retourne -112 parce que la ptable 8 Mo custom n'a qu'**un seul
+slot app** (`ota_0`); l'OTA stock veut écrire la nouvelle version dans `ota_1`,
+qui n'existe pas. Rien n'est cassé — la maj avorte proprement AVANT d'écrire.
+Deux conséquences :
+
+1. **Ignorer la notification de maj** sur l'appareil (elle reviendra).
+2. **Maj manuelle** quand on en veut une (voir ci-dessous).
+
+### Procédure de mise à jour manuelle du stock
+
+```bash
+# 1. Interroger l'API officielle (canal .cn = Domestic, le plus à jour ; .cc = Overseas)
+curl -s "http://api-prod.xteink.cn/api/v1/check-update?current_version=V7.6.8\
+&device_type=ESP32S3_X4_TL_SSD1677&device_id=12345&lng=cn&ota_type=1"
+#    -> JSON : version, download_url (.xota), plain_sha256
+#    Note : les toutes nouvelles versions (ex. format V26111201) ne sont
+#    servies qu'aux appareils enregistrés (device_id réel) — rollout progressif.
+
+# 2. Télécharger le .xota, le déchiffrer (voir « Comment le firmware a été
+#    obtenu » plus bas), vérifier sha256 + magic e9.
+
+# 3. Flasher via JTAG (voir wiki/02-flash.md), app seule @0x10000 :
+#    reset halt ; program_esp <app.bin> 0x10000 verify reset
+```
+
+### Chantier futur : rétablir l'OTA auto (layout 16 Mo)
+
+La puce fait physiquement **16 Mo** (esptool/JTAG le confirment ; seul le
+bootloader ko.2 est *configuré* 8 Mo — c'est lui qui refuse les tables >
+8 Mo). Rétablir l'OTA auto = écrire un bootloader esp-idf buildé pour 16 Mo +
+une table nvs/otadata/ota_0/ota_1. Risque : paramètres flash (QIO/OPI) à
+deviner ; brick toujours récupérable par JTAG. À faire en session dédiée.
+
+## Comment le firmware a été obtenu (méthode reproductible)
 
 ```bash
 # 1. Interroger l'API de mise à jour officielle (device_type du X4 Pro)
