@@ -1,82 +1,92 @@
 # 09 — Retour au firmware stock (Xteink « Licorice »)
 
-## La réponse courte
+## ✅ Le firmware stock est OBTENU (15/11/2026) — voie OTA officielle
 
-**Techniquement : oui.** Le flash JTAG/esptool maîtrisé ici écrit n'importe quoi,
-donc une restauration usine est possible. **Pratiquement : il faut d'abord se
-procurer une image complète du flash d'un X4 Pro d'origine** — elle n'existe pas
-en téléchargement officiel. Xteink ne publie pas de firmware de restauration ;
-même la communauté le dit noir sur blanc
-([ExplorInk, section « back up first »](https://explorink.com/install/)) :
-« *There is no menu entry, no recovery partition and no vendor download that puts
-it back. What puts it back is a copy of the flash you made before you wrote
-anything.* » — et ce dump peut être celui **d'un appareil d'un autre
-propriétaire**.
+Mise à jour majeure : il n'y a **pas besoin d'un dump d'un autre appareil**.
+L'API de mise à jour officielle de Xteink distribue le firmware stock en
+`.xota` (`encrypted_v1`), et le format a été publié par le projet open-source
+[crosspoint-tools](https://github.com/crosspoint-reader/crosspoint-tools)
+(`unlocker-tool/crates/unlocker-core/src/xota.rs`). Firmware récupéré et
+**déchiffré le 15/11/2026** :
 
-## Ce qu'il faut exactement
+- **Xteink stock V7.6.8** (2026-09-22), app image ESP32-S3 claire,
+  sha256 `f68533a8c55c55144303605e6497a0178215d477ec2642375814e00612afe087`
+- Copies locales : `~/Downloads/xteink-stock-V7.6.8-encrypted.xota` (chiffré)
+  et `~/Downloads/xteink-stock-app-V7.6.8.bin` (clair, flashable)
+- ⚠️ Ne pas publier ces binaires dans le dépôt public (copyright Xteink) —
+  la méthode ci-dessous suffit à les régénérer.
 
-Un **dump complet du flash 16 Mo** d'un X4 Pro stock (16 777 216 octets exactement,
-short = à jeter), pris avec `esptool --no-stub read-flash 0 0x1000000` avant tout
-flash. Ce fichier rétablit en une seule écriture @0x0 : bootloader stock, table
-de partition 16 Mo, otadata, les deux slots OTA et l'app Licorice.
-
-> Pourquoi 16 Mo alors que notre setup dit « 8 Mo » : la **puce physique fait
-> 16 Mo** (esptool/JTAG la détectent ainsi). C'est le bootloader ROM du X4 Pro
-> qui est configuré 8 Mo et qui refuse les tables 16 Mo — d'où le ptable 8 Mo
-> custom de ce dépôt. Une image stock complète ramène le bootloader d'origine
-> qui, lui, connaît le 16 Mo.
-
-## Pourquoi nos `update.bin` ne sont pas le stock
-
-Les deux `update.bin` trouvés (`~/Downloads/update.bin`, celui de la sauvegarde
-de carte) sont des images **CrossPoint 2.0.0** (magic `e9`, strings
-`CrossPoint-ESP32-2.0.0`). Ils ne remettent pas Licorice.
-
-## Le piège de la piste « swap de partition »
-
-[https://xteink.dve.al/](https://xteink.dve.al/) propose « Flash English firmware »
-(OTA rapide : écrit le firmware officiel sur la partition de *backup* puis swap).
-**Ça ne marchera pas ici** : la ptable 8 Mo custom de ce dépôt n'a qu'**un seul
-slot app** (`app0`, pas de `ota_1`). Le swap suppose le layout d'origine à deux
-slots. Même remarque pour « Swap boot partition » de la page debug.
-
-## Les 3 pistes concrètes (par ordre de chances)
-
-1. **La communauté** — demander un dump « full flash » d'un X4 Pro stock sur le
-   GitHub [crosspoint-reader-ko](https://github.com/crosspoint-reader-ko/crosspoint-reader-ko)
-   (Discussions/Issues) ou le Discord Xteink. Beaucoup de gens ont cliqué
-   « Save full flash » sur xteink.dve.al avant de flasher ; un dump est
-   interchangeable entre appareils du même modèle.
-2. **Le support Xteink** — mail demandant le « firmware de restauration usine /
-   recovery image » pour X4 Pro. Réponse probable : procédure SAV, mais ça
-   coûte un email.
-3. **Les forums** (ereadersforum.com, Reddit) — sujets « Xteink X4 Pro » où un
-   dump a pu être partagé.
-
-## La procédure le jour où l'image arrive
+### Comment le firmware a été obtenu (méthode reproductible)
 
 ```bash
-# 1) (Refaire un backup du flash actuel AVANT, par sécurité — leçon du 14/11)
-esptool --chip esp32s3 -p /dev/cu.usbmodem201101 --no-stub \
-  read-flash 0 0x1000000 avant-retour-stock.bin
-# ~18-25 min, écran figé pendant la lecture : c'est normal.
-# Vérifier : exactement 16777216 octets, sinon refaire.
+# 1. Interroger l'API de mise à jour officielle (device_type du X4 Pro)
+curl -s "http://api-prod.xteink.cc/api/v1/check-update?current_version=V0.0.1\
+&device_type=ESP32S3_X4_TL_SSD1677&device_id=12345&lng=en&ota_type=1"
+# -> JSON : version, download_url (.xota), size, plain_sha256
 
-# 2) Écrire l'image stock @0x0
-esptool --chip esp32s3 -p /dev/cu.usbmodem201101 --no-stub \
-  write-flash 0x0 xteink-stock-16mb.bin
-# Si esptool coince : JTAG (voir wiki/02-flash.md), program_esp @0x0.
-# Le bootloader stock s'occuppe du reste (16 Mo, 2 slots OTA, app Licorice).
+# 2. Télécharger le .xota depuis l'URL du JSON
 
-# 3) Power 10 s, boot : liseuse d'usine.
-# La carte SD peut rester ; Licorice utilise ses propres dossiers.
+# 3. Déchiffrer (format XOTA documenté dans crosspoint-tools/src/xota.rs) :
+#    [0:4] "XOTA" | [4:20] IV | [20:202] métadonnées AES-128-CTR | [202:] app chiffrée
+#    CTR = compteur 128-bit big-endian CONTINU sur métadonnées+app.
+#    Clé AES-128 du channel ota_type=1 (constante du firmware, publiée) :
+KEY1=4f2791b80dd75a6aef0d728a39a8c05e
+#    pycryptodome : AES.new(key, MODE_CTR, nonce=b'',
+#                           initial_value=int.from_bytes(iv,'big')).decrypt(data[20:])
+# 4. Vérifier : sha256(app_claire) == plain_sha256 de l'API, premier octet 0xe9,
+#    strings "XTEink X4 Pro".
 ```
 
-## Leçons de ce cas (ajoutées aux playbooks)
+## La réponse courte
+
+**Techniquement : oui, et c'est maintenant prêt.** Le flash JTAG/esptool de ce
+dépôt écrit l'image stock claire @0x10000 en conservant le bootloader ko.2 @0x0
+et la ptable 8 Mo @0x8000 — layout compatible esp-idf (nvs, otadata, app0 en
+ota_0).
+
+## Procédure de retour au stock (avec le V7.6.8 obtenu)
+
+```bash
+cd ~/dev/xteink-x4p-rescue
+
+# 1) Sauvegarder le flash actuel AVANT (leçon du 14/11 — toujours dumper)
+esptool --chip esp32s3 -p /dev/cu.usbmodem201101 --no-stub \
+  read-flash 0 0x800000 avant-retour-stock-8mb.bin
+# ~15-20 min, écran figé : normal. Vérifier la taille du fichier.
+
+# 2) Flasher l'app stock @0x10000 (méthode chunkée éprouvée, 6,25 Mo)
+./scripts/flash-chunked.sh 0 ~/Downloads/xteink-stock-app-V7.6.8.bin
+# ⚠️ Ne PAS écrire 0x8000 ensuite : le ptable 8 Mo actuel reste en place.
+
+# 3) Power 10 s, boot. Console UART pour le premier boot :
+python3 scripts/console-listen.py /dev/cu.usbmodem201101
+
+# 4) Si boot KO : lire les logs (partition manquante, etc.) et ajuster la
+#    ptable (scripts/make-ptable.py) en conséquence.
+```
+
+Risques résiduels : l'app stock peut réclamer une partition absente du ptable
+8 Mo (les logs UART le diront) ; les futures mises à jour OTA du stock
+s'installeront dans le slot unique ota_0 (OTA « même slot », supporté par
+esp-idf). L'app stock V7.x gère le panneau UC8279/SSD1677 de ce X4 Pro.
+
+## Ce qu'il ne faut PAS faire
+
+- **La piste « swap OTA » de xteink.dve.al** : notre ptable n'a qu'un seul
+  slot (`ota_1` absent), le swap suppose deux slots. Incompatible.
+- **Publier les binaires stock** dans ce dépôt : copyright Xteink. La méthode
+  de la section « obtenu » suffit.
+
+## Les 3 pistes historiques (si un jour l'API tombe)
+
+1. Dump complet 16 Mo d'un X4 Pro d'origine (`esptool --no-stub read-flash 0
+   0x1000000` — un dump d'un appareil du même modèle est interchangeable).
+2. Support Xteink : « recovery image X4 Pro ».
+3. Forums (ereadersforum.com, Reddit r/Xteink).
+
+## Leçons
 
 - **Toujours dumper le flash complet avant de flasher quoi que ce soit.**
-  `read-flash 0 0x1000000` (avec `--no-stub` — sinon le transfert long meurt
-  à 15 %, « Packet content transfer stopped »). 18-25 min, une seule fois,
-  et n'importe quel firmware redevient réversible.
-- Un dump d'un appareil **du même modèle** est interchangeable : ce n'est pas
-  un secret, c'est le firmware usine.
+- L'OTA « chiffré » de Xteink est un chiffrement de transport AES-128-CTR avec
+  une clé constante extraite du firmware — documenté par crosspoint-tools.
+
